@@ -1,7 +1,8 @@
+const url = require('url');
+const cors = require('cors');
 const faker = require('faker');
 const express = require('express');
 const cookie = require('cookie-parser');
-const cors = require('cors');
 const { ApolloServer, gql } = require('apollo-server-express');
 
 // Keep faker non-random to output deterministic data
@@ -69,9 +70,9 @@ const resolvers = {
   Mutation: {
     toggleTodo: (_, { id }, context) => {
       const { cookieData } = context;
-      const index = parseInt(id, 10);
+      const index = typeof id === 'string' ? parseInt(id, 10) : id;
 
-      if (!index || index < 0 || index >= cookieData.length) {
+      if (index < 0 || index >= cookieData.length) {
         return null;
       }
 
@@ -79,14 +80,15 @@ const resolvers = {
       const complete = (newCookieData[index] = !newCookieData[index]);
       const text = getHackerTodo(index);
 
-      updateCookieData(context.res, newCookieData);
+      updateCookieData(context.req, context.res, newCookieData);
 
       return { id: index, text, complete };
     },
     addTodo: (_, __, context) => {
       const { cookieData } = context;
       const newCookieData = [...cookieData, false];
-      updateCookieData(context.res, newCookieData);
+
+      updateCookieData(context.req, context.res, newCookieData);
 
       return getTodos(newCookieData);
     }
@@ -94,11 +96,21 @@ const resolvers = {
 };
 
 // We save the completed state and length of data in a short cookie
-const updateCookieData = (res, cookieData) => {
+const updateCookieData = (req, res, cookieData) => {
+  let origin = req.get('Origin');
+  if (!origin) {
+    origin = req.hostname;
+  } else {
+    origin = url.parse(origin).host || req.hostname;
+  }
+
   res.cookie(
     COOKIE_NAME,
     JSON.stringify(cookieData),
-    { maxAge: 900000 }
+    {
+      maxAge: 9000000,
+      httpOnly: true
+    }
   );
 };
 
@@ -113,7 +125,7 @@ const context = ({ req, res }) => {
     cookieData = [false, false, false];
   }
 
-  return { cookieData, res };
+  return { cookieData, req, res };
 };
 
 const apollo = new ApolloServer({
@@ -131,12 +143,13 @@ const apollo = new ApolloServer({
 
 const app = express();
 
-app.use(cors());
 app.use(cookie());
+app.use(cors({ origin: true, credentials: true }));
 
 apollo.applyMiddleware({
   app,
-  path: '/'
+  path: '/',
+  cors: false
 });
 
 module.exports = app;
