@@ -1,0 +1,7 @@
+{
+  "version": 2,
+  "name": "urql-testapi-todos",
+  "builds": [
+    { "src": "index.js", "use": "@now/node" }
+  ]
+}
